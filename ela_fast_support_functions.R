@@ -2234,10 +2234,6 @@ plot_CSI_gFAST_panels <- function(
   panel_ncol = 4,
   panel_nrow = 2,
 
-  panel_tags = TRUE,
-  panel_tag_case = c("lower", "upper"),
-  panel_tag_labels = NULL,
-
   common_axis = TRUE,
   xlim_range = NULL,
   ylim_range = NULL,
@@ -2275,8 +2271,6 @@ plot_CSI_gFAST_panels <- function(
   ## Argument handling
   ## ------------------------------------------------------------
 
-  panel_tag_case <- match.arg(panel_tag_case)
-
   device <- match.arg(
     device,
     choices = c("screen", "png", "eps", "none"),
@@ -2304,7 +2298,16 @@ plot_CSI_gFAST_panels <- function(
     stop("M and CSI must have the same number of columns.")
   }
 
-  if (length(ge) != nrow(M)) {
+  ## ge can be vector, matrix, or data frame
+  if (is.matrix(ge) || is.data.frame(ge)) {
+    ge_vec <- as.numeric(ge[, 1])
+    ge_names <- rownames(ge)
+  } else {
+    ge_vec <- as.numeric(ge)
+    ge_names <- names(ge)
+  }
+
+  if (length(ge_vec) != nrow(M)) {
     stop("length(ge) must match nrow(M).")
   }
 
@@ -2324,7 +2327,12 @@ plot_CSI_gFAST_panels <- function(
     colnames(CSI) <- colnames(M)
   }
 
-  ge <- as.numeric(ge)
+  ## Align ge to M by row names if possible
+  if (!is.null(ge_names) && all(rownames(M) %in% ge_names)) {
+    ge_vec <- ge_vec[match(rownames(M), ge_names)]
+  }
+
+  ge <- ge_vec
   names(ge) <- rownames(M)
 
   if (is.null(panel_ids)) {
@@ -2350,41 +2358,6 @@ plot_CSI_gFAST_panels <- function(
       "Number of panels exceeds panel_ncol * panel_nrow. ",
       "Increase panel_ncol/panel_nrow or reduce panel_ids."
     )
-  }
-
-  ## ------------------------------------------------------------
-  ## Panel tag labels: (a), (b), ...
-  ## ------------------------------------------------------------
-
-  make_panel_tags <- function(n, case = "lower") {
-    alphabet <- if (case == "lower") letters else LETTERS
-
-    vapply(seq_len(n), function(i) {
-      x <- i
-      tag <- ""
-
-      while (x > 0) {
-        r <- (x - 1) %% 26 + 1
-        tag <- paste0(alphabet[r], tag)
-        x <- (x - 1) %/% 26
-      }
-
-      paste0("(", tag, ")")
-    }, character(1))
-  }
-
-  if (is.null(panel_tag_labels)) {
-    panel_tag_labels <- make_panel_tags(length(panel_ids), panel_tag_case)
-  } else {
-    if (length(panel_tag_labels) < length(panel_ids)) {
-      stop("panel_tag_labels must have at least length(panel_ids) elements.")
-    }
-
-    panel_tag_labels <- panel_tag_labels[seq_along(panel_ids)]
-  }
-
-  if (!isTRUE(panel_tags)) {
-    panel_tag_labels <- rep("", length(panel_ids))
   }
 
   ## ------------------------------------------------------------
@@ -2446,7 +2419,7 @@ plot_CSI_gFAST_panels <- function(
   ## Helper: create one panel
   ## ------------------------------------------------------------
 
-  make_panel <- function(ci, df, panel_tag) {
+  make_panel <- function(ci, df) {
 
     if (nrow(df) >= 3) {
       ct <- suppressWarnings(
@@ -2462,17 +2435,16 @@ plot_CSI_gFAST_panels <- function(
 
     panel_label <- colnames(M)[ci]
 
+    ## Title format:
+    ## C1 | 0.123 (p=0.045)
     title_text <- paste0(
       panel_label,
-      " | \u03C1=",
+      " | ",
       rho_val,
-      ", p=",
-      p_val
+      " (p=",
+      p_val,
+      ")"
     )
-
-    if (nzchar(panel_tag)) {
-      title_text <- paste(panel_tag, title_text)
-    }
 
     p <- ggplot2::ggplot(
       df,
@@ -2536,8 +2508,7 @@ plot_CSI_gFAST_panels <- function(
   plots <- Map(
     make_panel,
     panel_ids,
-    panel_data,
-    panel_tag_labels
+    panel_data
   )
 
   n_blank <- panel_capacity - length(plots)
@@ -2654,7 +2625,6 @@ plot_CSI_gFAST_panels <- function(
     plot = panel,
     panel_data = panel_data,
     panel_ids = panel_ids,
-    panel_tag_labels = panel_tag_labels,
     xlim_range = xlim_range,
     ylim_range = ylim_range,
     params = list(
@@ -2663,8 +2633,6 @@ plot_CSI_gFAST_panels <- function(
       panel_capacity = panel_capacity,
       n_panels = length(panel_ids),
       n_blank = n_blank,
-      panel_tags = panel_tags,
-      panel_tag_case = panel_tag_case,
       device = device,
       file = file,
       output_files = output_files,
@@ -2676,7 +2644,6 @@ plot_CSI_gFAST_panels <- function(
 
   return(out)
 }
-
 ## ------------------------------------------------------------
 ## Reusable helper:
 ## Match binary community compositions to SSD groups
